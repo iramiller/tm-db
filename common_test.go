@@ -67,11 +67,22 @@ func checkValuePanics(t *testing.T, itr Iterator) {
 }
 
 func newTempDB(t *testing.T, backend BackendType) (db DB, dbDir string) {
-	dirname, err := ioutil.TempDir("", "db_common_test")
+	var err error
+
+	dbDir, err = ioutil.TempDir("", "db_common_test")
 	require.NoError(t, err)
-	db, err = NewDB("testdb", backend, dirname)
-	require.NoError(t, err)
-	return db, dirname
+
+	if backend == RedisDBBackend {
+		// uses the special creator here so we get db 13 and we flush it.
+		db, err = NewRedisDBWithOpts("localhost:6379", "", 13, nil)
+		require.NoError(t, err)
+		err = unsafeReset(db.(*RedisDB))
+		require.NoError(t, err)
+	} else {
+		db, err = NewDB("testdb", backend, dbDir)
+		require.NoError(t, err)
+	}
+	return db, dbDir
 }
 
 func benchmarkRangeScans(b *testing.B, db DB, dbSize int64) {
@@ -130,6 +141,73 @@ func benchmarkRandomReadsWrites(b *testing.B, db DB) {
 			err := db.Set(idxBytes, valBytes)
 			if err != nil {
 				// require.NoError() is very expensive (according to profiler), so check manually
+				b.Fatal(b, err)
+			}
+		}
+
+		// Read something
+		{
+			idx := rand.Int63n(numItems)
+			valExp := internal[idx]
+			idxBytes := int642Bytes(idx)
+			valBytes, err := db.Get(idxBytes)
+			if err != nil {
+				// require.NoError() is very expensive (according to profiler), so check manually
+				b.Fatal(b, err)
+			}
+			if valExp == 0 {
+				if !bytes.Equal(valBytes, nil) {
+					b.Errorf("Expected %v for %v, got %X", nil, idx, valBytes)
+					break
+				}
+			} else {
+				if len(valBytes) != 8 {
+					b.Errorf("Expected length 8 for %v, got %X", idx, valBytes)
+					break
+				}
+				valGot := bytes2Int64(valBytes)
+				if valExp != valGot {
+					b.Errorf("Expected %v for %v, got %v", valExp, idx, valGot)
+					break
+				}
+			}
+		}
+
+	}
+}
+
+func benchmarkRandomReadsBatchWrites(b *testing.B, db DB) {
+	b.StopTimer()
+
+	// create dummy data
+	const numItems = int64(1000000)
+	internal := map[int64]int64{}
+	for i := 0; i < int(numItems); i++ {
+		internal[int64(i)] = int64(0)
+	}
+
+	// fmt.Println("ok, starting")
+	b.StartTimer()
+
+	for i := 0; i < b.N; i++ {
+
+		// Write something in batch
+		{
+			batch := db.NewBatch()
+			for j := 0; j < b.N; j++ {
+				idx := rand.Int63n(numItems)
+				internal[idx]++
+				val := internal[idx]
+				idxBytes := int642Bytes(idx)
+				valBytes := int642Bytes(val)
+				err := batch.Set(idxBytes, valBytes)
+				if err != nil {
+					// require.NoError() is very expensive (according to profiler), so check manually
+					b.Fatal(b, err)
+				}
+			}
+			err := batch.Write()
+			if err != nil {
 				b.Fatal(b, err)
 			}
 		}

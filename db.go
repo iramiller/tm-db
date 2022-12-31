@@ -35,6 +35,9 @@ const (
 	RocksDBBackend BackendType = "rocksdb"
 
 	BadgerDBBackend BackendType = "badgerdb"
+
+	// Redis backend support via go-redis
+	RedisDBBackend BackendType = "redis"
 )
 
 type dbCreator func(name string, dir string) (DB, error)
