@@ -3,6 +3,8 @@ package db
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/go-redis/redis/v9"
 )
@@ -37,9 +39,11 @@ func NewRedisDB(host string, pwd string) (*RedisDB, error) {
 
 func NewRedisDBWithOpts(host string, pwd string, dbNum int, o *redis.Options) (*RedisDB, error) {
 	rdb := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379", //"localhost:6379",
-		Password: pwd,              // "" == none set
-		DB:       dbNum,            // use default DB 0 (zero)
+		Addr:         "localhost:6379", // "localhost:6379",
+		Password:     pwd,              // "" == none set
+		DB:           dbNum,            // use default DB 0 (zero)
+		WriteTimeout: time.Minute,
+		ReadTimeout:  time.Minute,
 	})
 	database := &RedisDB{
 		db: rdb,
@@ -52,7 +56,7 @@ func (db *RedisDB) Get(key []byte) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, errKeyEmpty
 	}
-	res, err := db.db.Get(ctx, string(key[:])).Result()
+	res, err := db.db.Get(ctx, string(key)).Result()
 	if err != nil {
 		if err == redis.Nil {
 			return nil, nil
@@ -89,12 +93,10 @@ func (db *RedisDB) SetSync(key []byte, value []byte) error {
 	}
 
 	_, err := db.db.Pipelined(ctx, func(pipe redis.Pipeliner) error {
-		pipe.Set(ctx, string(key[:]), string(value[:]), redis.KeepTTL)
-		pipe.ZAdd(ctx, redisKeyIndex, redis.Z{Score: 0, Member: string(key[:])})
+		pipe.Set(ctx, string(key), string(value), redis.KeepTTL)
+		pipe.ZAdd(ctx, redisKeyIndex, redis.Z{Score: 0, Member: string(key)})
 		return nil
 	})
-
-	//_, err := db.db.Set(ctx, string(key[:]), string(value[:]), redis.KeepTTL).Result()
 
 	return err
 }
@@ -111,12 +113,10 @@ func (db *RedisDB) DeleteSync(key []byte) error {
 	}
 
 	_, err := db.db.Pipelined(ctx, func(pipe redis.Pipeliner) error {
-		pipe.Del(ctx, string(key[:]))
-		pipe.ZRem(ctx, redisKeyIndex, string(key[:]))
+		pipe.Del(ctx, string(key))
+		pipe.ZRem(ctx, redisKeyIndex, string(key))
 		return nil
 	})
-
-	//_, err := db.db.Del(ctx, string(key[:])).Result()
 
 	return err
 }
@@ -153,6 +153,22 @@ func (db *RedisDB) Print() error {
 // Stats implements DB.
 func (db *RedisDB) Stats() map[string]string {
 	stats := make(map[string]string)
+	res, err := db.db.Info(ctx, "stats").Result()
+	if err != nil {
+		panic(err)
+	}
+	entries := strings.Split(res, "\r\n")
+	for _, e := range entries {
+		if strings.HasPrefix(e, "#") {
+			continue
+		}
+		entry := strings.Split(e, ":")
+		if len(entry) > 1 {
+			stats[entry[0]] = strings.Join(entry[1:], ":")
+		} else {
+			stats[e] = "n/a"
+		}
+	}
 	return stats
 }
 

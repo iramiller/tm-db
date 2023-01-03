@@ -3,6 +3,7 @@ package db
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,7 +26,7 @@ func BenchmarkRedisDBRangeScans1M(b *testing.B) {
 	}
 	defer cleanUp(db)
 
-	unsafeReset(db)
+	assert.NoError(b, unsafeReset(db))
 	benchmarkRangeScans(b, db, int64(1e6))
 }
 
@@ -36,7 +37,7 @@ func BenchmarkRedisDBRangeScans10M(b *testing.B) {
 	}
 	defer cleanUp(db)
 
-	unsafeReset(db)
+	assert.NoError(b, unsafeReset(db))
 	benchmarkRangeScans(b, db, int64(10e6))
 }
 
@@ -47,11 +48,10 @@ func BenchmarkRedisDBRandomReadsWrites(b *testing.B) {
 	}
 	defer cleanUp(db)
 
-	unsafeReset(db)
+	assert.NoError(b, unsafeReset(db))
 	benchmarkRandomReadsWrites(b, db)
 }
 
 func cleanUp(db *RedisDB) {
-	unsafeReset(db)
 	db.Close()
 }

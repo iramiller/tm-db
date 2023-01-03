@@ -8,7 +8,7 @@ import (
 
 const (
 	// limit to use for buffering
-	dbBufferLimit = 10000
+	dbBufferLimit = 100
 )
 
 type kvItem struct {
@@ -32,7 +32,12 @@ type redisDBIterator struct {
 
 var _ Iterator = (*redisDBIterator)(nil)
 
-func newRedisDBIterator(ctx context.Context, db redis.Client, start, end []byte, isReverse bool) (*redisDBIterator, error) {
+func newRedisDBIterator(
+	ctx context.Context,
+	db redis.Client,
+	start, end []byte,
+	isReverse bool,
+) (*redisDBIterator, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ch := make(chan *kvItem, dbBufferLimit)
 
@@ -54,23 +59,39 @@ func newRedisDBIterator(ctx context.Context, db redis.Client, start, end []byte,
 	if end == nil {
 		highKey = "+"
 	} else {
-		highKey = "(" + string(end[:])
+		highKey = "(" + string(end)
 	}
 	if start == nil {
 		lowKey = "-"
 	} else {
-		lowKey = "[" + string(start[:])
+		lowKey = "[" + string(start)
 	}
 
 	if isReverse {
 		keySetFn = func(offset int64) *redis.StringSliceCmd {
-			//return db.ZRevRange(ctx, redisKeyIndex, maximum(upperBound-offset, 0), minimum(lowerBound-offset-dbBufferLimit, lowerBound))
-			return db.ZRevRangeByLex(ctx, redisKeyIndex, &redis.ZRangeBy{Max: highKey, Min: lowKey, Offset: offset, Count: dbBufferLimit})
+			return db.ZRevRangeByLex(
+				ctx,
+				redisKeyIndex,
+				&redis.ZRangeBy{
+					Max:    highKey,
+					Min:    lowKey,
+					Offset: offset,
+					Count:  dbBufferLimit,
+				},
+			)
 		}
 	} else {
 		keySetFn = func(offset int64) *redis.StringSliceCmd {
-			//return db.ZRange(ctx, redisKeyIndex, lowerBound+offset, minimum(lowerBound+offset+dbBufferLimit, upperBound))
-			return db.ZRangeByLex(ctx, redisKeyIndex, &redis.ZRangeBy{Min: lowKey, Max: highKey, Offset: offset, Count: dbBufferLimit})
+			return db.ZRangeByLex(
+				ctx,
+				redisKeyIndex,
+				&redis.ZRangeBy{
+					Min:    lowKey,
+					Max:    highKey,
+					Offset: offset,
+					Count:  dbBufferLimit,
+				},
+			)
 		}
 	}
 
@@ -95,7 +116,7 @@ func newRedisDBIterator(ctx context.Context, db redis.Client, start, end []byte,
 				case <-ctx.Done():
 					return
 				case ch <- item:
-					offset += 1
+					offset++
 				}
 			}
 		}

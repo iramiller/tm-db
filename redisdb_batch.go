@@ -66,9 +66,6 @@ func (b *redisDBBatch) write(sync bool) error {
 
 // Close implements Batch.
 func (b *redisDBBatch) Close() error {
-	if b.batch != nil {
-		b.batch.Discard()
-		b.batch = nil
-	}
+	b.batch = nil
 	return nil
 }
