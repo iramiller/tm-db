@@ -24,6 +24,9 @@ func newRedisDBBatch(ctx context.Context, db *RedisDB) *redisDBBatch {
 
 // Set implements Batch.
 func (b *redisDBBatch) Set(key, value []byte) error {
+	if len(key) == 0 {
+		return errKeyEmpty
+	}
 	b.batch.ZAdd(b.ctx, redisKeyIndex, redis.Z{Score: 0, Member: string(key)})
 	b.batch.Set(b.ctx, string(key), string(value), redis.KeepTTL)
 	return nil
@@ -31,6 +34,9 @@ func (b *redisDBBatch) Set(key, value []byte) error {
 
 // Delete implements Batch.
 func (b *redisDBBatch) Delete(key []byte) error {
+	if len(key) == 0 {
+		return errKeyEmpty
+	}
 	b.batch.ZRem(b.ctx, redisKeyIndex, redis.Z{Score: 0, Member: string(key)})
 	b.batch.Del(b.ctx, string(key))
 	return nil

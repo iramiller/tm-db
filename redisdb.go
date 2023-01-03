@@ -37,9 +37,9 @@ func NewRedisDB(host string, pwd string) (*RedisDB, error) {
 
 func NewRedisDBWithOpts(host string, pwd string, dbNum int, o *redis.Options) (*RedisDB, error) {
 	rdb := redis.NewClient(&redis.Options{
-		Addr:     host,  //"localhost:6379",
-		Password: pwd,   // "" == none set
-		DB:       dbNum, // use default DB 0 (zero)
+		Addr:     "localhost:6379", //"localhost:6379",
+		Password: pwd,              // "" == none set
+		DB:       dbNum,            // use default DB 0 (zero)
 	})
 	database := &RedisDB{
 		db: rdb,
@@ -64,6 +64,9 @@ func (db *RedisDB) Get(key []byte) ([]byte, error) {
 
 // Has implements DB.
 func (db *RedisDB) Has(key []byte) (bool, error) {
+	if len(key) == 0 {
+		return false, errKeyEmpty
+	}
 	bytes, err := db.Get(key)
 	if err != nil {
 		return false, err
@@ -109,7 +112,7 @@ func (db *RedisDB) DeleteSync(key []byte) error {
 
 	_, err := db.db.Pipelined(ctx, func(pipe redis.Pipeliner) error {
 		pipe.Del(ctx, string(key[:]))
-		pipe.ZRem(ctx, string(key[:]))
+		pipe.ZRem(ctx, redisKeyIndex, string(key[:]))
 		return nil
 	})
 
